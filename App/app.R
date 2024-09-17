@@ -10,7 +10,6 @@ library(janitor)
 # Internal API key (replace with your actual API key)
 OPENAI_API_KEY <- Sys.getenv("OPENAI_API_KEY")
 
-
 ui <- page_fluid(
   theme = bs_theme(version = 5),
   titlePanel("Fake Dataset Generator"),
@@ -19,7 +18,9 @@ ui <- page_fluid(
       textInput("description", "Describe the dataset you want", 
                 placeholder = "e.g., health data for a family of 4"),
       actionButton("generate", "Generate Dataset"),
-      downloadButton("download", "Download CSV")
+      downloadButton("download", "Download CSV"),
+      br(), br(),
+      uiOutput("summary")
     ),
     mainPanel(
       navset_tab(
@@ -35,6 +36,7 @@ ui <- page_fluid(
 
 server <- function(input, output, session) {
   dataset <- reactiveVal(NULL)
+  summary_text <- reactiveVal("")
   
   preprocess_csv <- function(csv_string) {
     # Extract only the CSV part
@@ -67,6 +69,35 @@ server <- function(input, output, session) {
     tibble(!!!setNames(as.list(as.data.frame(t(processed_lines))), header))
   }
   
+  generate_summary <- function(df) {
+    prompt <- paste("Summarize the following dataset:\n\n",
+                    "Dimensions: ", nrow(df), "rows and", ncol(df), "columns\n\n",
+                    "Variables:\n", paste(names(df), collapse=", "), "\n\n",
+                    "Please provide a brief summary of the dataset dimensions and variable definitions. Keep it concise, about 3-4 sentences.")
+    
+    response <- POST(
+      url = "https://api.openai.com/v1/chat/completions",
+      add_headers(Authorization = paste("Bearer", OPENAI_API_KEY)),
+      content_type_json(),
+      body = toJSON(list(
+        model = "gpt-3.5-turbo-0125",
+        messages = list(
+          list(role = "system", content = "You are a helpful assistant that summarizes datasets."),
+          list(role = "user", content = prompt)
+        )
+      ), auto_unbox = TRUE),
+      encode = "json"
+    )
+    
+    if (status_code(response) == 200) {
+      content <- content(response)
+      summary <- content$choices[[1]]$message$content
+      return(summary)
+    } else {
+      return("Error generating summary. Please try again later.")
+    }
+  }
+  
   observeEvent(input$generate, {
     req(input$description)
     
@@ -97,6 +128,11 @@ server <- function(input, output, session) {
           mutate(across(everything(), ~ ifelse(suppressWarnings(!is.na(as.numeric(.))), as.numeric(.), as.character(.))))
         dataset(df)
         updateSelectInput(session, "variable", choices = names(df))
+        
+        # Generate and set summary
+        summary <- generate_summary(df)
+        summary_text(summary)
+        
       }, error = function(e) {
         showNotification(paste("Error parsing CSV:", e$message), type = "error")
       })
@@ -144,6 +180,15 @@ server <- function(input, output, session) {
       write.csv(dataset(), file, row.names = FALSE)
     }
   )
+  
+  output$summary <- renderUI({
+    req(summary_text())
+    div(
+      h4("Dataset Summary"),
+      p(summary_text()),
+      style = "background-color: #f0f0f0; padding: 10px; border-radius: 5px;"
+    )
+  })
 }
 
 shinyApp(ui, server)
