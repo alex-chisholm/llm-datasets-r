@@ -32,7 +32,7 @@ ui <- page_fluid(
       navset_tab(
         nav_panel("Data Table", 
                   br(),
-                DTOutput("dataset")
+                  DTOutput("dataset")
         )
       )
     )
