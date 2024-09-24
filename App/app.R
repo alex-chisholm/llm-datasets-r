@@ -6,28 +6,33 @@ library(stringr)
 library(tidyverse)
 library(bslib)
 library(janitor)
+library(shinyjs)
+library(shinycssloaders)
 
 # Internal API key (replace with your actual API key)
 OPENAI_API_KEY <- Sys.getenv("OPENAI_API_KEY")
 
 ui <- page_fluid(
   theme = bs_theme(version = 5),
-  titlePanel("Fake Dataset Generator"),
+  useShinyjs(),  # Add this to use shinyjs
+  br(),
+  titlePanel("AI Dataset Generator"),
   sidebarLayout(
     sidebarPanel(
       textInput("description", "Describe the dataset you want", 
                 placeholder = "e.g., health data for a family of 4"),
       actionButton("generate", "Generate Dataset"),
-      downloadButton("download", "Download CSV"),
+      hidden(downloadButton("download", "Download CSV")),  # Hide download button initially
       br(), br(),
-      uiOutput("summary")
+      uiOutput("summary"),
+      hr(),
+      tags$small("Note: Generated data may not be accurate or suitable for real-world use. The maximum number of records is limited to 25.")
     ),
     mainPanel(
       navset_tab(
-        nav_panel("Data Table", DTOutput("dataset")),
-        nav_panel("Visualizations",
-                  selectInput("variable", "Select Variable", choices = NULL),
-                  plotOutput("plot")
+        nav_panel("Data Table", 
+                  br(),
+                DTOutput("dataset")
         )
       )
     )
@@ -100,8 +105,9 @@ server <- function(input, output, session) {
   
   observeEvent(input$generate, {
     req(input$description)
+    showPageSpinner()
     
-    prompt <- paste("Generate a fake dataset as a CSV string based on this description:",
+    prompt <- paste("Generate a fake dataset with at least two variables as a CSV string based on this description:",
                     input$description, "Include a header row. Limit to 25 rows of data. Ensure all rows have the same number of columns. Do not include any additional text or explanations.")
     
     response <- POST(
@@ -133,43 +139,28 @@ server <- function(input, output, session) {
         summary <- generate_summary(df)
         summary_text(summary)
         
+        # Show download button
+        hidePageSpinner()
+        shinyjs::show("download")
+        
+        
+        
       }, error = function(e) {
         showNotification(paste("Error parsing CSV:", e$message), type = "error")
       })
     } else {
       showNotification("Error generating dataset. Please try again later.", type = "error")
     }
+    
+    # Hide loading spinner
+    shinyjs::hide("loading-spinner")
   })
   
   output$dataset <- renderDT({
     req(dataset())
-    datatable(dataset(), options = list(pageLength = 10))
+    datatable(dataset(), rownames = FALSE, options = list(pageLength = 10))
   })
   
-  output$plot <- renderPlot({
-    req(dataset(), input$variable)
-    df <- dataset()
-    var <- input$variable
-    
-    if (is.numeric(df[[var]])) {
-      ggplot(df, aes(x = .data[[var]])) +
-        geom_histogram(binwidth = function(x) diff(range(x)) / 30, fill = "skyblue", color = "black") +
-        labs(title = paste("Histogram of", var), x = NULL, y = NULL) +
-        theme_minimal()
-    } else {
-      
-      df2 <- df %>%
-        count(.data[[var]]) %>%
-        arrange(desc(n)) %>%
-        slice(1:10)
-      
-      ggplot(df2, aes_string(x = var, y = "n")) +
-        geom_bar(stat = "identity") +
-        labs(title = "Column Chart", caption = "Up to 10 records shown", x = NULL, y = NULL) +
-        theme_minimal() +
-        theme(axis.text.x = element_text(angle = 45, hjust = 1))
-    }
-  })
   
   output$download <- downloadHandler(
     filename = function() {
