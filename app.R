@@ -19,7 +19,7 @@ ui <- page_fluid(
   titlePanel(
     tagList("AI Dataset Generator", 
             tags$br(),
-            tags$a(href = "https://connect.posit.cloud/", "Deployed to Connect Cloud", target = "_blank"))
+            tags$a(href = "https://connect.posit.cloud/", "Deployed to Connect Cloud", target = "_blank", style = "font-size: 0.5em; color: #555;"))),
   sidebarLayout(
     sidebarPanel(
       textInput("description", "Describe the dataset you want", 
