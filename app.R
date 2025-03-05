@@ -16,7 +16,11 @@ ui <- page_fluid(
   theme = bs_theme(version = 5),
   useShinyjs(),  # Add this to use shinyjs
   br(),
-  titlePanel("AI Dataset Generator"),
+  titlePanel(
+    tagList("AI Dataset Generator", 
+            tags$br(),
+            tags$a(href = "https://connect.posit.cloud/", "Deployed to Connect Cloud", target = "_blank"))
+  )
   sidebarLayout(
     sidebarPanel(
       textInput("description", "Describe the dataset you want", 
